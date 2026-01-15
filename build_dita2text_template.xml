@@ -7,12 +7,6 @@
     <property name="temp.output.dir.name" value="text_out"/>
     <property name="out.ext" value=".txt"/>
     
-    <!-- This is for DITA-OT 4: see https://www.dita-ot.org/dev/topics/migrating-to-4.0 -->
-    <!-- <property name="build-step.copy-files" value="false"/>
-    <property name="build-step.copy-image" value="false"/>
-    <property name="build-step.copy-html" value="false"/>
-    <property name="build-step.copy-flag" value="false"/> -->
-
     <property name="preprocess.copy-files.skip" value="true"/>
     <property name="preprocess.copy-image.skip" value="true"/>
     <property name="preprocess.copy-html.skip" value="true"/>
