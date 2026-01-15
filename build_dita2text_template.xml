@@ -1,0 +1,148 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project name="dita2text" xmlns:dita="http://dita-ot.sourceforge.net"
+  xmlns:if="ant:if"
+  xmlns:unless="ant:unless">
+
+  <target name="dita2text.init">
+    <property name="temp.output.dir.name" value="text_out"/>
+    <property name="out.ext" value=".txt"/>
+    
+    <!-- This is for DITA-OT 4: see https://www.dita-ot.org/dev/topics/migrating-to-4.0 -->
+    <!-- <property name="build-step.copy-files" value="false"/>
+    <property name="build-step.copy-image" value="false"/>
+    <property name="build-step.copy-html" value="false"/>
+    <property name="build-step.copy-flag" value="false"/> -->
+
+    <property name="preprocess.copy-files.skip" value="true"/>
+    <property name="preprocess.copy-image.skip" value="true"/>
+    <property name="preprocess.copy-html.skip" value="true"/>
+    <property name="preprocess.copy-flag.skip" value="true"/>
+    <!-- Text processing, like the troff code it overrides, is done in two steps.
+      
+      The first step converts DITA topics to an AST syntax: https://en.wikipedia.org/wiki/Abstract_syntax_tree
+      Basically, this means the DITA code is converted to divs and spans (block nodes and text nodes). A bit more
+      complex than that but not much. The text.ast.xsl param here sets up the XSL used by the first step, which
+      can be overridden (the text XSL for step 1).
+      
+      The second step converts those divs and spans to plain text output. This Step 2 XSL can also be overridden
+      by an external XSL. -->
+    <property name="text.ast.xsl" location="${dita.plugin.org.dita.text.dir}/xsl/txtstep1_shell.xsl"/>
+    <property name="text.step2.xsl" location="${dita.plugin.org.dita.text.dir}/xsl/txtstep2_shell.xsl"/>
+    <property name="generate.copy.outer" value="3"/>
+    <property name="zip.output.files" value="mapdir"/>  <!-- mapdir | alldir -->
+    <!-- text.lineend accepts values cr, lf, crlf
+    Default is lf, which is the default coming out of Saxon.
+    This means by default we don't post process to change line endings. -->
+    <property name="text.lineend" value="lf"/>
+    <condition property="convert-to-win" value="true">
+      <equals arg1="${text.lineend}" arg2="crlf"/>
+    </condition>
+    <condition property="convert-to-mac" value="true">
+      <equals arg1="${text.lineend}" arg2="cr"/>
+    </condition>
+    <condition property="convert-to-unix" value="true">
+      <and>
+        <not><isset property="convert-to-win"/></not>
+        <not><isset property="convert-to-mac"/></not>
+      </and>
+    </condition>
+    <property name="text.title.format" value="default"/>
+    <property name="text.toc" value="none"/>
+    <property name="text.linelength" value="65"/>
+  </target>
+
+  <!-- Pull in all of preprocess so that we can AVOID the otherwise universal post preprocess SVG diagram operation -->
+  <!-- Basic summary:
+    * Set up properties for text transform (troff AST initialization, dita2text init, normal build-init)
+    * Keep the "preprocess.pre" extension point, so plugins can push common things in ahead of preprocess
+    * Run the normal preprocess
+    * ###REMOVE### the extension point "preprocess.post", because that's used to insert SVG Syntax diagrams, and we can't do that here
+    * Check if we're running on an AIX server
+    * Run idsyngen (does nothing unless node is available)
+    * Run the AST step (which also extracts tables)
+    * Run the second step to create text (text-table plugin can insert itself ahead here to generate tables)
+    * Return the text output -->
+  <target name="dita2text"
+    dita:depends="dita2troff-ast.init, dita2text.init, build-init,
+    {depend.preprocess.pre},
+    preprocess.init,ditaval-merge,gen-list,debug-filter,mapref,branch-filter,copy-files,keyref,copy-to,conrefpush,conref,profile,topic-fragment,chunk,move-meta-entries,maplink,topicpull,clean-map,
+    dita.topic.text-ast, dita.inner.topic.text"
+    dita:extension="depends org.dita.dost.platform.InsertDependsAction"
+    description="Build text output">
+  </target>
+
+  <!-- Convert each DITA topic to AST syntax. -->
+  <target name="dita.topic.text-ast" unless="noTopic" 
+    dita:depends="{depend.org.dita.text.pre.ast}"
+    dita:extension="depends org.dita.dost.platform.InsertDependsAction"
+    description="Build Text-specific AST output from dita topics.">
+    <makeurl property="input.map.for.cover" file="${dita.temp.dir}${file.separator}${user.input.file}" validate="false"/>
+    <echo>text.ast.xsl: ${text.ast.xsl}</echo>
+    <echo>${dita.temp.dir}${file.separator}${fullditatopicfile}</echo>
+    <echo>text.title.format: ${text.title.format}</echo>
+    <echo>text.toc: ${text.toc}</echo>
+    <echo>text.coverinfo: ${text.coverinfo}</echo>
+    <echo>input.map.for.cover: ${input.map.for.cover}</echo>
+    <echo>text.linelength: ${text.linelength}</echo>
+    <pipeline message="Build AST output on way to text" taskname="ditatoast">
+    <xslt basedir="${dita.temp.dir}"
+      destdir="${dita.temp.dir}" includesfile="${dita.temp.dir}${file.separator}${fullditatopicfile}"
+      extension=".dita"
+      classpathref="dost.class.path"
+      style="${text.ast.xsl}"
+      filenameparameter="FILENAME"
+  	  filedirparameter="FILEDIR">
+      <ditafileset format="dita" processingRole="normal"/>
+    	<!--<excludesfile name="${dita.temp.dir}${file.separator}${resourceonlyfile}" if="resourceonlyfile"/>-->
+      <param name="titleformat" expression="${text.title.format}"/>
+      <param name="contents" expression="${text.toc}"/>
+      <param name="coverinfo" expression="${text.coverinfo}" if:set="text.coverinfo"/>
+      <param name="inputfile" expression="${input.map.for.cover}"/>
+      <param name="override-linelength" expression="${text.linelength}"/>
+      <mapper type="glob" from="*" to="*.ast" />
+      <xmlcatalog refid="dita.catalog"/>
+    </xslt>
+    </pipeline>
+    <move todir="${dita.temp.dir}">
+      <fileset dir="${dita.temp.dir}" includes="**/*.ast" />
+      <mapper type="glob" from="*.ast" to="*" />
+    </move>
+  </target>
+
+  <!-- Build each AST topic into text.
+      The table plugin on the server also inserts code to read generated tables back into the text file.  -->
+    <target name="dita.inner.topic.text" unless="noTopic"
+        dita:depends="{depend.org.dita.text.pre}"
+        dita:extension="depends org.dita.dost.platform.InsertDependsAction"
+        description="Build text output from inner dita topics">
+    <pipeline message="Build ast to text" taskname="asttotext">
+        <xslt basedir="${dita.temp.dir}" destdir="${output.dir}"
+        includesfile="${dita.temp.dir}${file.separator}${fullditatopicfile}" extension="${out.ext}"
+        classpathref="dost.class.path"
+        style="${text.step2.xsl}">
+          <ditafileset format="dita" processingRole="normal"/>
+          <param name="OUTFORMAT" expression="plaintext"/>
+          <param name="override-linelength" expression="${text.linelength}"/>
+          <mapper type="regexp" 
+            from="^(${tempdirToinputmapdir.relative.value})(.*?)(\.(xml|dita))$$" 
+            to="\2${out.ext}"/>
+          <xmlcatalog refid="dita.catalog"/>
+        </xslt>
+      </pipeline>
+
+    <echo if:set="convert-to-win">Converting line-ends to Windows CRLF</echo>
+    <replaceregexp match="\n" replace="&#13;&#10;" flags="g" if:set="convert-to-win" encoding="utf-8">
+      <fileset dir="${output.dir}" includes="**/*${out.ext}"/>
+    </replaceregexp>
+    <echo if:set="convert-to-mac">Converting line-ends to Mac</echo>
+    <replaceregexp match="\n" replace="&#13;" flags="g" if:set="convert-to-mac" encoding="utf-8">
+      <fileset dir="${output.dir}" includes="**/*${out.ext}"/>
+    </replaceregexp>
+    <!-- Default: Unix line ends -->
+    <replaceregexp match="\n" replace="&#10;" flags="g" if:set="convert-to-unix" encoding="utf-8">
+      <fileset dir="${output.dir}" includes="**/*${out.ext}"/>
+    </replaceregexp>
+
+  </target>
+  
+</project>

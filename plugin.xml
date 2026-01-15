@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<plugin id="org.dita.text">
+  <feature extension="package.version" value="1.0.0"/>
+  <extension-point id="dita.xsl.text.ast" name="Text XSLT import, step 1"/>
+  <extension-point id="dita.xsl.text" name="Text XSLT import"/>
+  <extension-point id="depend.org.dita.text.pre.ast" name="Process before AST processing"/>
+  <extension-point id="depend.org.dita.text.pre" name="Process before text output"/>
+  <feature extension="ant.import" file="build_dita2text.xml"/>
+  <template file="xsl/txtstep1_shell_template.xsl"/>
+  <template file="xsl/txtstep2_shell_template.xsl"/>
+  <template file="build_dita2text_template.xml"/>
+  <transtype name="text" extends="troff" desc="Text output">
+    <param name="text.title.format" desc="Specifies whether to add numeric prefixes to topic titles." type="enum">
+      <val default="true">default</val>
+      <val>number</val>
+    </param>
+    <param name="text.toc" desc="Specifies whether to add a TOC to the top of each output text file." type="enum">
+      <val default="true">none</val>
+      <val>toc</val>
+    </param>
+    <param name="text.lineend" desc="Specifies what line end characters to use." type="enum">
+      <val default="true">lf</val>
+      <val>crlf</val>
+      <val>cr</val>
+    </param>
+    <param name="text.coverinfo" desc="Specifies whether to add book title and release." type="enum">
+      <val default="true">none</val>
+      <val>add</val>
+    </param>
+    <param name="text.linelength" desc="Specifies how many characters to allow on a line." type="string"/>
+  </transtype>
+  
+  <!-- This plugin requires the troff plugin as it's based on it and require its ant targets -->
+  <require plugin="org.dita.troff"/>
+
+</plugin>
